@@ -24,50 +24,80 @@ async function handleImport(request, env) {
     const items = await request.json();
 
     if (!Array.isArray(items)) {
-      return new Response("Invalid format: must be a JSON array", { status: 400 });
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Invalid format: must be a JSON array"
+      }), { 
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const dates = [];
-    const monthSet = new Set();
+    const monthMap = new Map(); // 使用Map来存储每个月份的数据
+    let skippedCount = 0; // 记录跳过的项目数
 
     for (const item of items) {
       if (!item.date || !item.url) continue;
 
       const date = item.date;
       const month = date.slice(0, 7);
+      
+      // 检查该日期的数据是否已存在
+      const existingData = await env.BING_KV.get(`bing:${date}`, { type: "json" });
+      if (existingData) {
+        // 如果数据已存在，跳过该项
+        skippedCount++;
+        continue;
+      }
+
       dates.push(date);
-      monthSet.add(month);
+      
+      // 将日期按月份分组
+      if (!monthMap.has(month)) {
+        monthMap.set(month, []);
+      }
+      monthMap.get(month).push(date);
 
       await env.BING_KV.put(`bing:${date}`, JSON.stringify(item));
     }
 
-    // 每月只允许同一批为同一月，否则报错
-    if (monthSet.size !== 1) {
-      return new Response("All items must belong to the same month", { status: 400 });
+    // 为每个月份更新数据
+    for (const [month, monthDates] of monthMap.entries()) {
+      const monthKey = `month:${month}`;
+      
+      const existing = await env.BING_KV.get(monthKey);
+      let mergedDates = monthDates;
+
+      if (existing) {
+        const prev = JSON.parse(existing);
+        const mergedSet = new Set([...prev, ...monthDates]);
+        mergedDates = Array.from(mergedSet).sort();
+      }
+
+      await env.BING_KV.put(monthKey, JSON.stringify(mergedDates));
     }
 
-    const month = Array.from(monthSet)[0];
-    const monthKey = `month:${month}`;
-
-    const existing = await env.BING_KV.get(monthKey);
-    let mergedDates = dates;
-
-    if (existing) {
-      const prev = JSON.parse(existing);
-      const mergedSet = new Set([...prev, ...dates]);
-      mergedDates = Array.from(mergedSet).sort();
-    }
-
-    await env.BING_KV.put(monthKey, JSON.stringify(mergedDates));
-
-    return new Response(`Successfully imported ${dates.length} items for ${month}`, {
-      status: 200
+    return new Response(JSON.stringify({
+      success: true,
+      message: `Successfully imported ${dates.length} items, skipped ${skippedCount} existing items`,
+      importedCount: dates.length,
+      skippedCount: skippedCount,
+      months: Array.from(monthMap.keys())
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
     });
   } catch (err) {
-    return new Response("Error importing data: " + err.message, { status: 500 });
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Error importing data: " + err.message
+    }), { 
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 }
-
 
 async function renderHome(env) {
   try {
@@ -110,6 +140,7 @@ async function renderMonth(month, env) {
 }
 
 // 页面模板渲染函数
+// 页面模板渲染函数
 function renderPage(title, bodyContent) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -118,15 +149,101 @@ function renderPage(title, bodyContent) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-    a { color: #337ab7; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    small { color: #666; }
-    img { max-width: 100%; height: auto; margin-top: 5px; margin-bottom: 5px; }
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 20px; 
+      line-height: 1.6; 
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 15px;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    a { 
+      color: #337ab7; 
+      text-decoration: none; 
+    }
+    a:hover { 
+      text-decoration: underline; 
+    }
+    small { 
+      color: #666; 
+      display: block;
+      margin-top: 5px;
+    }
+    .month-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 20px;
+      list-style: none;
+      padding: 0;
+    }
+    .month-item {
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .wallpaper-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+      list-style: none;
+      padding: 0;
+    }
+    .wallpaper-item {
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .wallpaper-item strong {
+      display: block;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    .wallpaper-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 10px 0;
+      border-radius: 3px;
+    }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 30px;
+      padding: 10px;
+    }
+    @media (max-width: 768px) {
+      .wallpaper-grid {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      }
+      .month-list {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+    }
+    @media (max-width: 480px) {
+      .wallpaper-grid {
+        grid-template-columns: 1fr;
+      }
+      .month-list {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
   </style>
 </head>
 <body>
-  ${bodyContent}
+  <div class="container">
+    ${bodyContent}
+  </div>
 </body>
 </html>`;
 }
@@ -136,8 +253,12 @@ function renderMonthList(months) {
   if (months.length === 0) return "<p>暂无数据</p>";
 
   return `<h1>Bing 历史壁纸月份</h1>
-  <ul>
-    ${months.map(m => `<li><a href="/${m}">${m}</a></li>`).join("")}
+  <ul class="month-list">
+    ${months.map(m => `
+      <li class="month-item">
+        <a href="/${m}">${m}</a>
+      </li>
+    `).join("")}
   </ul>`;
 }
 
@@ -147,15 +268,20 @@ function renderWallpaperList(items) {
   if (validItems.length === 0) return "<p>该月份无壁纸数据</p>";
 
   return `<h1>壁纸列表</h1>
-  <ul>
+  <ul class="wallpaper-grid">
     ${validItems.map(item => `
-      <li>
-        <strong>${item.date}</strong>: 
-        <a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title || "查看大图"}</a><br>
-        <img src="${item.url}" alt="${item.title || "Bing 壁纸"}" loading="lazy" width="480"><br>
+      <li class="wallpaper-item">
+        <strong><a id="img_title" href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title || "Bing 壁纸"}</a></strong>
+        <a href="${item.url}" target="_blank" rel="noopener noreferrer">
+          <img id="img_url" src="${item.url}" alt="${item.title || "Bing 壁纸"}" loading="lazy" class="wallpaper-image">
+        </a>
         <small>${item.copyright || ""}</small>
+        
+        <strong><a id="img_date" href="${item.url}" target="_blank" rel="noopener noreferrer">${item.date}</a></strong>
       </li>
     `).join("")}
   </ul>
-  <p><a href="/">← 返回首页</a></p>`;
+  <div class="back-link">
+    <a href="/">← 返回首页</a>
+  </div>`;
 }

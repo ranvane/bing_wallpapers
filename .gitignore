@@ -1,2 +1,5 @@
 bing_wallpapers/*
 .wrangler
+zh-cn
+.vscode/settings.json
+bing_wallpapers_import.json
