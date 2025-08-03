@@ -5,6 +5,9 @@ import requests
 import time
 import json
 
+results = []
+base_dir = './zh-cn'  # 壁纸数据文件目录，来自https://github.com/niumoo/bing-wallpaper
+
 def clean_url(url):
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
@@ -17,8 +20,7 @@ cell_pattern = re.compile(
     r'!\[\]\((https://[^\)]+)\)\s*(\d{4}-\d{2}-\d{2})'
 )
 
-results = []
-base_dir = './zh-cn'  # 替换为你的 Markdown 文件目录
+
 
 for root, dirs, files in os.walk(base_dir):
     for file in files:

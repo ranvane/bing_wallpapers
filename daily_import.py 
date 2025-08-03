@@ -1,0 +1,67 @@
+import requests
+from datetime import datetime
+from urllib.parse import urlparse, urlunparse
+
+
+def clean_bing_url(full_url):
+    parsed = urlparse(full_url)
+    # 只保留路径（即 /th?id=...）
+    clean_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '',
+                            parsed.query.split('&')[0], ''))
+    return clean_url
+
+
+def get_today_bing_wallpaper(region='cn'):
+    url = f"https://{region}.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1"
+
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if "images" in data and data["images"]:
+            img = data["images"][0]
+            image_url = f"https://{region}.bing.com{img['urlbase']}_UHD.jpg"
+            return {
+                "date": img.get("enddate"),
+                "title": img.get("title", ""),
+                "url": clean_bing_url(image_url),
+                "copyright": img.get("copyright", "")
+            }
+        else:
+            print("没有获取到图像数据")
+            return None
+    except Exception as e:
+        print("获取 Bing 壁纸出错：", e)
+        return None
+
+if __name__ == "__main__":
+    url = "https://bingwallpapers.skerylrode.eu.org/import"  # 替换为你的实际地址
+
+    # url = "http://127.0.0.1:8787/import"
+    # 设置密码（应与你在 Worker 中设置的一致）
+    password = "default_password"  # 请替换成你设置的密码
+
+    # 发起 POST 请求，添加 X-Import-Password 头
+    headers = {
+        "Content-Type": "application/json",
+        "X-Import-Password": password
+    }
+    wallpaper = get_today_bing_wallpaper()
+
+    if wallpaper:
+        print("✅ 今日 Bing 壁纸：")
+        print("日期：", wallpaper["date"])
+        print("标题：", wallpaper["title"])
+        print("链接：", wallpaper["url"])
+        print("版权：", wallpaper["copyright"])
+        items = [{
+            "date": wallpaper["date"],
+            "title": wallpaper["title"],
+            "url": wallpaper["url"],
+            "copyright": wallpaper["copyright"]
+        }]
+        
+        resp = requests.post(url, json=items, headers=headers, timeout=10)
+        print(resp.status_code)
+        print(resp.text)
