@@ -27,7 +27,7 @@ jobs:
         run: |
           echo "当前目录: $(pwd)"
           ls -la
-          python daily_import.py
+          python3 daily_import.py
 
       - name: 当前目录
         run: |
