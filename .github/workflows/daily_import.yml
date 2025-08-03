@@ -26,10 +26,9 @@ jobs:
       - name: List files for debug
         run: ls -la
 
-      - name: Check daily_import.py existence
+      - name: 当前目录
         run: |
-          ls -l bing_wallpapers/daily_import.py
-          cat bing_wallpapers/daily_import.py | head -n 10
+          echo "当前目录: $(pwd)"
 
       - name: Run import script
         run: python bing_wallpapers/daily_import.py
