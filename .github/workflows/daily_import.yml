@@ -26,4 +26,4 @@ jobs:
           
       - name: Run import script
         run: |
-          python ./daily_import.py
+          python bing_wallpapers/daily_import.py
