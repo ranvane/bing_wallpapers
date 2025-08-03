@@ -33,6 +33,7 @@ export default {
 
 async function handle_Import(request, env) {
   // 你可以在 .env 中配置 IMPORT_PASSWORD 环境变量作为密码
+  //如果环境变量 IMPORT_PASSWORD 没有设置或为空，则使用默认密码 "default_password"
   const expectedPassword = env.IMPORT_PASSWORD || "default_password";
   const requestPassword = request.headers.get("X-Import-Password");
 
