@@ -25,8 +25,8 @@ jobs:
 
       - name: Check daily_import.py existence
         run: |
-          ls -l daily_import.py
-          cat daily_import.py | head -n 10
+          ls -l bing_wallpapers/daily_import.py
+          cat bing_wallpapers/daily_import.py | head -n 10
 
       - name: Run import script
         run: python bing_wallpapers/daily_import.py
