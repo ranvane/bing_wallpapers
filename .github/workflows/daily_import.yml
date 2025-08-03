@@ -29,4 +29,4 @@ jobs:
           cat daily_import.py | head -n 10
 
       - name: Run import script
-        run: python daily_import.py
+        run: python bing_wallpapers/daily_import.py
