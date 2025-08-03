@@ -20,6 +20,15 @@ items = [
     }
 ]
 
-resp = requests.post(url, json=items, timeout=10)
+# 设置密码（应与你在 Worker 中设置的一致）
+password = "super_secret"  # 请替换成你设置的密码
+
+# 发起 POST 请求，添加 X-Import-Password 头
+headers = {
+    "Content-Type": "application/json",
+    "X-Import-Password": password
+}
+
+resp = requests.post(url, json=items, headers=headers, timeout=10)
 print(resp.status_code)
 print(resp.text)

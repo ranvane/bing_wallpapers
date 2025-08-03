@@ -1,36 +1,62 @@
 export default {
+  // 异步 fetch 函数，处理所有传入的请求
   async fetch(request, env, ctx) {
     try {
+      // 从请求 URL 中提取路径名
       const { pathname } = new URL(request.url);
 
+      // 根据请求方法和路径名进行路由分发
+      // 如果是 POST 请求且路径为 /import，则调用 handleImport 函数处理数据导入
       if (request.method === "POST" && pathname === "/import") {
-        return await handleImport(request, env);
+        return await handle_Import(request, env);
+        // 如果路径为根路径 /，则调用 renderHome 函数渲染主页
       } else if (pathname === "/") {
-        return await renderHome(env);
+        return await handle_Home(env);
+        // 如果路径匹配 YYYY-MM 格式（如 /2023-05），则调用 renderMonth 函数渲染该月的壁纸列表
       } else if (/^\/\d{4}-\d{2}$/.test(pathname)) {
+        // 提取月份字符串（去掉开头的斜杠）
         const month = pathname.slice(1);
-        return await renderMonth(month, env);
+        return await handle_Month(month, env);
+        // 如果路径为 /export，则调用 handleExport 函数处理数据导出
+      } else if (pathname === "/export") {
+        return await handle_Export(request, env);
+        // 对于其他路径，返回 404 错误
       } else {
         return new Response("Not Found", { status: 404 });
       }
     } catch (err) {
+      // 如果发生错误，返回 500 错误和错误信息
       return new Response(`内部错误: ${err.message}`, { status: 500 });
     }
   },
 };
 
-async function handleImport(request, env) {
+async function handle_Import(request, env) {
+  // 你可以在 .env 中配置 IMPORT_PASSWORD 环境变量作为密码
+  const expectedPassword = env.IMPORT_PASSWORD || "default_password";
+  const requestPassword = request.headers.get("X-Import-Password");
+
+  if (requestPassword !== expectedPassword) {
+    return new Response(
+      JSON.stringify({ success: false, error: "无权访问：密码错误" }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const items = await request.json();
 
     if (!Array.isArray(items)) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: "Invalid format: must be a JSON array"
-      }), { 
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Invalid format: must be a JSON array",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
     const dates = [];
@@ -42,9 +68,11 @@ async function handleImport(request, env) {
 
       const date = item.date;
       const month = date.slice(0, 7);
-      
+
       // 检查该日期的数据是否已存在
-      const existingData = await env.BING_KV.get(`bing:${date}`, { type: "json" });
+      const existingData = await env.BING_KV.get(`bing:${date}`, {
+        type: "json",
+      });
       if (existingData) {
         // 如果数据已存在，跳过该项
         skippedCount++;
@@ -52,7 +80,7 @@ async function handleImport(request, env) {
       }
 
       dates.push(date);
-      
+
       // 将日期按月份分组
       if (!monthMap.has(month)) {
         monthMap.set(month, []);
@@ -65,7 +93,7 @@ async function handleImport(request, env) {
     // 为每个月份更新数据
     for (const [month, monthDates] of monthMap.entries()) {
       const monthKey = `month:${month}`;
-      
+
       const existing = await env.BING_KV.get(monthKey);
       let mergedDates = monthDates;
 
@@ -78,31 +106,102 @@ async function handleImport(request, env) {
       await env.BING_KV.put(monthKey, JSON.stringify(mergedDates));
     }
 
-    return new Response(JSON.stringify({
-      success: true,
-      message: `Successfully imported ${dates.length} items, skipped ${skippedCount} existing items`,
-      importedCount: dates.length,
-      skippedCount: skippedCount,
-      months: Array.from(monthMap.keys())
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `Successfully imported ${dates.length} items, skipped ${skippedCount} existing items`,
+        importedCount: dates.length,
+        skippedCount: skippedCount,
+        months: Array.from(monthMap.keys()),
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (err) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: "Error importing data: " + err.message
-    }), { 
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Error importing data: " + err.message,
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }
 
-async function renderHome(env) {
+async function handle_Export(request, env) {
+  const url = new URL(request.url);
+  const month = url.searchParams.get("month"); // 支持 ?month=2025-07
+
+  try {
+    let result = [];
+
+    if (month) {
+      const monthKey = `month:${month}`;
+      const data = await env.BING_KV.get(monthKey);
+      if (!data) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "指定月份无数据",
+          }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const dates = JSON.parse(data);
+      result = await Promise.all(
+        dates.map(
+          async (d) => await env.BING_KV.get(`bing:${d}`, { type: "json" })
+        )
+      );
+    } else {
+      // 导出全部数据
+      const list = await env.BING_KV.list({ prefix: "bing:" });
+      for (const key of list.keys) {
+        const item = await env.BING_KV.get(key.name, { type: "json" });
+        if (item) result.push(item);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        count: result.length,
+        data: result,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "导出失败: " + err.message,
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+}
+
+async function handle_Home(env) {
   try {
     const list = await env.BING_KV.list({ prefix: "month:" });
-    const months = list.keys.map(k => k.name.slice(6)).sort().reverse();
+    const months = list.keys
+      .map((k) => k.name.slice(6))
+      .sort()
+      .reverse();
 
     return new Response(
       renderPage("Bing 历史壁纸月份", renderMonthList(months)),
@@ -113,7 +212,7 @@ async function renderHome(env) {
   }
 }
 
-async function renderMonth(month, env) {
+async function render_Month(month, env) {
   try {
     const monthKey = `month:${month}`;
     const data = await env.BING_KV.get(monthKey);
@@ -254,32 +353,48 @@ function renderMonthList(months) {
 
   return `<h1>Bing 历史壁纸月份</h1>
   <ul class="month-list">
-    ${months.map(m => `
+    ${months
+      .map(
+        (m) => `
       <li class="month-item">
         <a href="/${m}">${m}</a>
       </li>
-    `).join("")}
+    `
+      )
+      .join("")}
   </ul>`;
 }
 
 // 月份页面壁纸列表渲染
 function renderWallpaperList(items) {
-  const validItems = items.filter(i => i !== null);
+  const validItems = items.filter((i) => i !== null);
   if (validItems.length === 0) return "<p>该月份无壁纸数据</p>";
 
   return `<h1>壁纸列表</h1>
   <ul class="wallpaper-grid">
-    ${validItems.map(item => `
+    ${validItems
+      .map(
+        (item) => `
       <li class="wallpaper-item">
-        <strong><a id="img_title" href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title || "Bing 壁纸"}</a></strong>
+        <strong><a id="img_title" href="${
+          item.url
+        }" target="_blank" rel="noopener noreferrer">${
+          item.title || "Bing 壁纸"
+        }</a></strong>
         <a href="${item.url}" target="_blank" rel="noopener noreferrer">
-          <img id="img_url" src="${item.url}" alt="${item.title || "Bing 壁纸"}" loading="lazy" class="wallpaper-image">
+          <img id="img_url" src="${item.url}" alt="${
+          item.title || "Bing 壁纸"
+        }" loading="lazy" class="wallpaper-image">
         </a>
         <small>${item.copyright || ""}</small>
         
-        <strong><a id="img_date" href="${item.url}" target="_blank" rel="noopener noreferrer">${item.date}</a></strong>
+        <strong><a id="img_date" href="${
+          item.url
+        }" target="_blank" rel="noopener noreferrer">${item.date}</a></strong>
       </li>
-    `).join("")}
+    `
+      )
+      .join("")}
   </ul>
   <div class="back-link">
     <a href="/">← 返回首页</a>

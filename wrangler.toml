@@ -8,3 +8,5 @@ local_port = 8787
 kv_namespaces = [
   { binding = "BING_KV", id = "your-kv-namespace-id" }
 ]
+[vars]
+IMPORT_PASSWORD = "super_secret"
