@@ -20,11 +20,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+        working-directory: ./bing_wallpapers
+
       - name: Debug directory structure
-        run: |
-          ls -la
-          
+        run: ls -la
+        working-directory: ./bing_wallpapers
+
       - name: Run import script
-        run: |
-          cd ..
-          python daily_import.py
+        run: python daily_import.py
+        working-directory: ./bing_wallpapers
