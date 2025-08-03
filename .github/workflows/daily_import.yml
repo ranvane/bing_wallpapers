@@ -22,7 +22,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Debug directory structure
-        run: ls -la
+        run: ls -la | awk -v pwd="$(pwd)" '{if ($9 != "") print pwd "/" $9}'
 
 
       - name: Run import script
