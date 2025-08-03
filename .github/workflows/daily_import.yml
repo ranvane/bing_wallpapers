@@ -3,6 +3,9 @@ name: Daily Bing Import
 on:
   schedule:
     - cron: '30 2 * * *'  # 每天 UTC+0 02:30 执行（北京时间 10:30）
+  push:
+    branches:
+      - main  # 或你使用的主分支，如 master
   workflow_dispatch:
 
 jobs:
