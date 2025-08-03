@@ -3,7 +3,7 @@ name: Daily Bing Import
 on:
   schedule:
     - cron: '30 2 * * *'  # 每天 UTC+0 02:30 执行（北京时间 10:30）
-  workflow_dispatch:      # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   run-script:
@@ -18,12 +18,15 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: List files for debug
+        run: ls -la
+
+      - name: Check daily_import.py existence
         run: |
-          pip install -r requirements.txt
-
-      - name: Debug directory structure
-        run: ls -la | awk -v pwd="$(pwd)" '{if ($9 != "") print pwd "/" $9}'
-
+          ls -l daily_import.py
+          cat daily_import.py | head -n 10
 
       - name: Run import script
-        run: python /home/runner/work/bing_wallpapers/bing_wallpapers/daily_import.py
+        run: python daily_import.py
